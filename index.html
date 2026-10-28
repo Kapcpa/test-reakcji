@@ -92,6 +92,7 @@
     <p>Patrz na środek ekranu. Najpierw u góry na chwilę pojawi się czerwony wykrzyknik, a po nim kółko po lewej albo prawej stronie.</p>
     <p>Jak najszybciej naciśnij klawisz po stronie kółka:<br>
       lewo: <kbd>A</kbd> lub <kbd>←</kbd>, prawo: <kbd>D</kbd> lub <kbd>→</kbd></p>
+    <p>Test uruchomi się na pełnym ekranie. <kbd>Esc</kbd> przerywa test.</p>
     <p class="hint">Naciśnij <kbd>spację</kbd>, aby rozpocząć</p>
   </div>
 </section>
@@ -118,12 +119,32 @@ const SHEET_URL = SHEET_URL_B64 ? atob(SHEET_URL_B64) : "";
 
 const DEFAULTS = { trials: 12, foreperiodMs: 10000, warningMs: 1000, pauseMinS: 2, pauseMaxS: 4 };
 const KEYS = {
-  KeyA: ["L", "AD"],
-  KeyD: ["P", "AD"],
-  ArrowLeft: ["L", "strzalki"],
-  ArrowRight: ["P", "strzalki"],
+  KeyA: ["L", "A/D"],
+  KeyD: ["P", "A/D"],
+  ArrowLeft: ["L", "strzałki"],
+  ArrowRight: ["P", "strzałki"],
 };
 const MAX_SAME_SIDE_IN_A_ROW = 3;
+const SIDE_NAMES = { L: "lewa", P: "prawa" };
+const yesNo = b => (b ? "tak" : "nie");
+const fmt = n => n.toLocaleString("pl-PL");
+
+// Nagłówki w CSV; te same co w arkuszu (apps-script.gs).
+const COLUMN_LABELS = {
+  data: "Data",
+  pseudonim: "Pseudonim",
+  id_sesji: "ID sesji",
+  nr_proby: "Nr próby",
+  strona: "Strona bodźca",
+  pierwszy_klawisz: "Pierwsza reakcja (strona)",
+  czas_pierwszej_reakcji_ms: "Czas pierwszej reakcji [ms]",
+  blad: "Błąd",
+  czas_poprawnej_reakcji_ms: "Czas poprawnej reakcji [ms]",
+  zestaw_klawiszy: "Klawisze",
+  odstep_sygnal_obiekt_ms: "Od „!” do bodźca [ms]",
+  czas_wykrzyknika_ms: "Czas wyświetlania „!” [ms]",
+  przerwa_ms: "Przerwa przed próbą [ms]",
+};
 
 const $ = id => document.getElementById(id);
 const state = { running: false, aborted: false, trial: null, cancel: null, settings: null, pseudonim: "", lastRows: [] };
@@ -222,7 +243,6 @@ function fillSettings(s) {
 function updateDuration() {
   const s = readSettings();
   const avgS = s.trials * ((s.pauseMinS + s.pauseMaxS) / 2 + s.foreperiodMs / 1000 + 0.5);
-  const fmt = n => n.toLocaleString("pl-PL");
   const pause = s.pauseMinS === s.pauseMaxS ? fmt(s.pauseMinS) : `${fmt(s.pauseMinS)}–${fmt(s.pauseMaxS)}`;
   $("duration").textContent =
     `Jedna próba: „!” przez ${fmt(s.warningMs / 1000)} s → pusty ekran → kółko ${fmt(s.foreperiodMs / 1000)} s po „!” → reakcja → przerwa ${pause} s. ` +
@@ -296,10 +316,10 @@ async function runTest() {
       pseudonim: state.pseudonim,
       id_sesji: sessionId,
       nr_proby: i + 1,
-      strona: trial.side,
-      pierwszy_klawisz: trial.firstKey,
+      strona: SIDE_NAMES[trial.side],
+      pierwszy_klawisz: SIDE_NAMES[trial.firstKey],
       czas_pierwszej_reakcji_ms: trial.rtFirst,
-      blad: trial.firstKey === trial.side ? 0 : 1,
+      blad: yesNo(trial.firstKey !== trial.side),
       czas_poprawnej_reakcji_ms: trial.rtCorrect,
       zestaw_klawiszy: trial.keyset,
       odstep_sygnal_obiekt_ms: s.foreperiodMs,
@@ -363,20 +383,22 @@ function summarize(rows, sessionId) {
   const s = state.settings;
   const bySide = side => rows.filter(r => r.strona === side);
   const rts = list => list.map(r => r.czas_poprawnej_reakcji_ms);
-  const L = bySide("L"), P = bySide("P");
+  const L = bySide(SIDE_NAMES.L), P = bySide(SIDE_NAMES.P);
+  const ok = list => list.filter(r => r.blad === "nie");
+  const errors = list => list.filter(r => r.blad === "tak").length;
   return {
     data: stamp(),
     pseudonim: state.pseudonim,
     id_sesji: sessionId,
-    ukonczony: rows.length === s.trials ? 1 : 0,
+    ukonczony: yesNo(rows.length === s.trials),
     liczba_prob: rows.length,
     sr_L_ms: mean(rts(L)),
     sr_P_ms: mean(rts(P)),
-    sr_L_bez_bledow_ms: mean(rts(L.filter(r => !r.blad))),
-    sr_P_bez_bledow_ms: mean(rts(P.filter(r => !r.blad))),
-    bledy_L: L.filter(r => r.blad).length,
-    bledy_P: P.filter(r => r.blad).length,
-    ustawienia: `proby=${s.trials}; sygnal_obiekt_ms=${s.foreperiodMs}; wykrzyknik_ms=${s.warningMs}; przerwa_s=${s.pauseMinS}-${s.pauseMaxS}`,
+    sr_L_bez_bledow_ms: mean(rts(ok(L))),
+    sr_P_bez_bledow_ms: mean(rts(ok(P))),
+    bledy_L: errors(L),
+    bledy_P: errors(P),
+    ustawienia: `liczba prób: ${s.trials}; „!”: ${fmt(s.warningMs / 1000)} s; od „!” do bodźca: ${fmt(s.foreperiodMs / 1000)} s; przerwa: ${fmt(s.pauseMinS)}–${fmt(s.pauseMaxS)} s`,
   };
 }
 
@@ -386,7 +408,7 @@ function toCsv(rows) {
     const str = String(v ?? "");
     return /[;"\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
   };
-  return "﻿" + [cols.join(";"), ...rows.map(r => cols.map(c => esc(r[c])).join(";"))].join("\r\n");
+  return "﻿" + [cols.map(c => esc(COLUMN_LABELS[c] ?? c)).join(";"), ...rows.map(r => cols.map(c => esc(r[c])).join(";"))].join("\r\n");
 }
 
 function downloadCsv(rows) {

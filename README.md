@@ -19,7 +19,7 @@ Otwórz `index.html` w przeglądarce. Bez ustawionego `SHEET_URL_B64` wyniki pob
 4. Zatwierdź uprawnienia, skopiuj URL wdrożenia (kończy się na `/exec`).
 5. Zakoduj URL: `echo -n 'https://script.google.com/...' | base64 -w0` i wklej wynik do `SHEET_URL_B64` na górze skryptu w `index.html`.
 
-Zakładki `wyniki` i `surowe` utworzą się same przy pierwszej sesji. Po każdej zmianie skryptu: Wdróż → Zarządzaj wdrożeniami → edytuj → nowa wersja (wtedy URL zostaje ten sam).
+Zakładki `Wyniki` i `Wszystkie próby` utworzą się same przy pierwszej sesji. Po każdej zmianie skryptu: Wdróż → Zarządzaj wdrożeniami → edytuj → nowa wersja (wtedy URL zostaje ten sam).
 
 ## Publikacja (GitHub Pages)
 
@@ -37,8 +37,8 @@ Zakładki `wyniki` i `surowe` utworzą się same przy pierwszej sesji. Po każde
 
 ## Kolumny
 
-`surowe` — jedna próba na wiersz: `blad` 0/1, czasy w ms od pojawienia się obiektu (`czas_poprawnej_reakcji_ms` = czas do dobrego klawisza), `zestaw_klawiszy` AD/strzalki.
+`Wszystkie próby` — jedna próba na wiersz: błąd tak/nie, czasy w ms od pojawienia się bodźca („Czas poprawnej reakcji” = czas do dobrego klawisza), klawisze A/D lub strzałki.
 
-`wyniki` — jedna sesja na wiersz: średnie L/P ze wszystkich prób (czas poprawnej reakcji) i tylko z prób bez błędu, liczba błędów L/P, ustawienia.
+`Wyniki` — jedna sesja na wiersz: średnie L/P ze wszystkich prób (czas poprawnej reakcji) i tylko z prób bez błędu, liczba błędów L/P, ustawienia.
 
-Nazwy kolumn bez polskich znaków i spacji, żeby bez problemu wczytać je do SPSS/R.
+Nagłówki są po polsku; SPSS/R przy imporcie same zamienią je na poprawne nazwy zmiennych.

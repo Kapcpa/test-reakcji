@@ -1,17 +1,38 @@
 /** @OnlyCurrentDoc */
 // Wklejane w arkuszu: Rozszerzenia → Apps Script. Przyjmuje wyniki ze strony i dopisuje je do zakładek.
 
-const RAW_SHEET = "surowe";
-const SUMMARY_SHEET = "wyniki";
+const SUMMARY_SHEET = "Wyniki";
+const RAW_SHEET = "Wszystkie próby";
 
-const RAW_COLUMNS = [
-  "data", "pseudonim", "id_sesji", "nr_proby", "strona", "pierwszy_klawisz",
-  "czas_pierwszej_reakcji_ms", "blad", "czas_poprawnej_reakcji_ms", "zestaw_klawiszy",
-  "odstep_sygnal_obiekt_ms", "czas_wykrzyknika_ms", "przerwa_ms",
-];
+// [klucz wysyłany ze strony, nagłówek w arkuszu]
 const SUMMARY_COLUMNS = [
-  "data", "pseudonim", "id_sesji", "ukonczony", "liczba_prob", "sr_L_ms", "sr_P_ms",
-  "sr_L_bez_bledow_ms", "sr_P_bez_bledow_ms", "bledy_L", "bledy_P", "ustawienia",
+  ["data", "Data"],
+  ["pseudonim", "Pseudonim"],
+  ["id_sesji", "ID sesji"],
+  ["ukonczony", "Ukończony"],
+  ["liczba_prob", "Liczba prób"],
+  ["sr_L_ms", "Śr. czas lewa [ms]"],
+  ["sr_P_ms", "Śr. czas prawa [ms]"],
+  ["sr_L_bez_bledow_ms", "Śr. czas lewa bez błędów [ms]"],
+  ["sr_P_bez_bledow_ms", "Śr. czas prawa bez błędów [ms]"],
+  ["bledy_L", "Błędy lewa"],
+  ["bledy_P", "Błędy prawa"],
+  ["ustawienia", "Ustawienia"],
+];
+const RAW_COLUMNS = [
+  ["data", "Data"],
+  ["pseudonim", "Pseudonim"],
+  ["id_sesji", "ID sesji"],
+  ["nr_proby", "Nr próby"],
+  ["strona", "Strona bodźca"],
+  ["pierwszy_klawisz", "Pierwsza reakcja (strona)"],
+  ["czas_pierwszej_reakcji_ms", "Czas pierwszej reakcji [ms]"],
+  ["blad", "Błąd"],
+  ["czas_poprawnej_reakcji_ms", "Czas poprawnej reakcji [ms]"],
+  ["zestaw_klawiszy", "Klawisze"],
+  ["odstep_sygnal_obiekt_ms", "Od „!” do bodźca [ms]"],
+  ["czas_wykrzyknika_ms", "Czas wyświetlania „!” [ms]"],
+  ["przerwa_ms", "Przerwa przed próbą [ms]"],
 ];
 
 function doPost(e) {
@@ -46,7 +67,7 @@ function validate(data) {
   if (!/^[a-z0-9-]{6,40}$/.test(s.id_sesji)) throw new Error("Niepoprawne id sesji");
   trials.forEach(t => {
     if (t.id_sesji !== s.id_sesji || t.pseudonim !== s.pseudonim) throw new Error("Niespójna sesja");
-    if (t.strona !== "L" && t.strona !== "P") throw new Error("Niepoprawna strona");
+    if (t.strona !== "lewa" && t.strona !== "prawa") throw new Error("Niepoprawna strona");
     ["czas_pierwszej_reakcji_ms", "czas_poprawnej_reakcji_ms"].forEach(k => {
       if (typeof t[k] !== "number" || t[k] < 0 || t[k] > 600000) throw new Error("Niepoprawny czas reakcji");
     });
@@ -54,20 +75,18 @@ function validate(data) {
 }
 
 function toRow(obj, columns) {
-  return columns.map(c => {
-    const v = obj[c] === undefined || obj[c] === null ? "" : obj[c];
+  return columns.map(([key]) => {
+    const v = obj[key] === undefined || obj[key] === null ? "" : obj[key];
     // Tekst zaczynający się od =, +, -, @ arkusz potraktowałby jak formułę.
     return typeof v === "string" && /^[=+\-@]/.test(v) ? "'" + v : v;
   });
 }
 
 function getSheet(ss, name, columns) {
-  let sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-    sheet.appendRow(columns);
-    sheet.setFrozenRows(1);
-  }
+  const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  // Nagłówki odświeżane przy każdym zapisie, więc zmiana nazw kolumn nie wymaga ręcznej poprawki.
+  sheet.getRange(1, 1, 1, columns.length).setValues([columns.map(([, label]) => label)]).setFontWeight("bold");
+  sheet.setFrozenRows(1);
   return sheet;
 }
 
