@@ -425,19 +425,25 @@ async function send(payload) {
   // text/plain, bo Apps Script nie obsługuje zapytań preflight CORS.
   const res = await fetch(SHEET_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) });
   const body = await res.json();
-  if (!body.ok) throw new Error(body.error);
+  if (!body.ok) throw Object.assign(new Error(body.error), { rejected: true });
 }
 
 // Niewysłane sesje czekają w przeglądarce i są ponawiane przy kolejnej okazji.
+// Sesje odrzucone przez arkusz (złe dane) nie są ponawiane, bo kolejna próba nic nie zmieni.
 async function flushPending() {
-  if (!SHEET_URL) return;
-  const failed = [];
+  const failed = [], errors = {};
+  if (!SHEET_URL) return { failed, errors };
   for (const payload of load("pending", [])) {
-    try { await send(payload); } catch { failed.push(payload); }
+    try {
+      await send(payload);
+    } catch (err) {
+      errors[payload.summary.id_sesji] = err.message;
+      if (!err.rejected) failed.push(payload);
+    }
   }
   save("pending", failed);
   $("pending").textContent = failed.length ? `Niewysłane sesje w tej przeglądarce: ${failed.length}` : "";
-  return failed;
+  return { failed, errors };
 }
 
 async function finish(rows, sessionId) {
@@ -458,10 +464,13 @@ async function finish(rows, sessionId) {
 
   status.textContent = "Wysyłanie wyników…";
   save("pending", [...load("pending", []), { summary: summarize(rows, sessionId), trials: rows }]);
-  const failed = await flushPending();
-  if (failed.some(p => p.summary.id_sesji === sessionId)) {
+  const { failed, errors } = await flushPending();
+  if (sessionId in errors) {
+    const retry = failed.some(p => p.summary.id_sesji === sessionId);
     status.className = "status-err";
-    status.textContent = "Nie udało się wysłać wyników. Zapisano je w przeglądarce (ponowimy wysyłkę później) i pobrano plik CSV.";
+    status.textContent = "Nie udało się wysłać wyników do arkusza" +
+      (retry ? " (zapisano je w przeglądarce, wysyłka zostanie ponowiona przy następnej sesji)" : "") +
+      `. Pobrano plik CSV. Szczegóły błędu: ${errors[sessionId]}`;
     downloadCsv(rows);
   } else {
     status.className = "status-ok";
