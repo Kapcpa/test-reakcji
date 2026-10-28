@@ -1,3 +1,4 @@
+/** @OnlyCurrentDoc */
 // Wklejane w arkuszu: Rozszerzenia → Apps Script. Przyjmuje wyniki ze strony i dopisuje je do zakładek.
 
 const RAW_SHEET = "surowe";
