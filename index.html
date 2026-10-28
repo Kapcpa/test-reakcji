@@ -24,7 +24,7 @@
   h1 { margin: 0 0 20px; font-size: 1.5rem; }
   p { line-height: 1.5; }
   label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 0.9rem; }
-  input { width: 100%; padding: 10px 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #444; background: var(--bg); color: var(--fg); }
+  input, select { width: 100%; padding: 10px 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #444; background: var(--bg); color: var(--fg); }
   .row { display: flex; gap: 12px; }
   .row > div { flex: 1; }
   details { margin-top: 20px; }
@@ -52,6 +52,12 @@
     <h1>Test czasu reakcji</h1>
     <label for="pseudonim">Pseudonim uczestnika</label>
     <input id="pseudonim" maxlength="40" autocomplete="off" required>
+    <label for="eye">Dominujące oko (opcjonalnie)</label>
+    <select id="eye">
+      <option value="">nie wpisuję</option>
+      <option value="lewe">lewe</option>
+      <option value="prawe">prawe</option>
+    </select>
 
     <details>
       <summary>Ustawienia</summary>
@@ -133,6 +139,7 @@ const fmt = n => n.toLocaleString("pl-PL");
 const COLUMN_LABELS = {
   data: "Data",
   pseudonim: "Pseudonim",
+  dominujace_oko: "Dominujące oko",
   id_sesji: "ID sesji",
   nr_proby: "Nr próby",
   strona: "Strona bodźca",
@@ -147,7 +154,7 @@ const COLUMN_LABELS = {
 };
 
 const $ = id => document.getElementById(id);
-const state = { running: false, aborted: false, trial: null, cancel: null, settings: null, pseudonim: "", lastRows: [] };
+const state = { running: false, aborted: false, trial: null, cancel: null, settings: null, pseudonim: "", eye: "", lastRows: [] };
 
 function load(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -266,6 +273,7 @@ $("start-form").addEventListener("submit", e => {
   save("settings", s);
   state.settings = s;
   state.pseudonim = pseudonim;
+  state.eye = $("eye").value;
   show("ready");
 });
 
@@ -314,6 +322,7 @@ async function runTest() {
     rows.push({
       data: stamp(),
       pseudonim: state.pseudonim,
+      dominujace_oko: state.eye,
       id_sesji: sessionId,
       nr_proby: i + 1,
       strona: SIDE_NAMES[trial.side],
@@ -389,6 +398,7 @@ function summarize(rows, sessionId) {
   return {
     data: stamp(),
     pseudonim: state.pseudonim,
+    dominujace_oko: state.eye,
     id_sesji: sessionId,
     ukonczony: yesNo(rows.length === s.trials),
     liczba_prob: rows.length,
@@ -480,6 +490,7 @@ async function finish(rows, sessionId) {
 
 $("next").addEventListener("click", () => {
   $("pseudonim").value = "";
+  $("eye").value = "";
   show("start");
   $("pseudonim").focus();
 });

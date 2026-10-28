@@ -8,6 +8,7 @@ const RAW_SHEET = "Wszystkie próby";
 const SUMMARY_COLUMNS = [
   ["data", "Data"],
   ["pseudonim", "Pseudonim"],
+  ["dominujace_oko", "Dominujące oko"],
   ["id_sesji", "ID sesji"],
   ["ukonczony", "Ukończony"],
   ["liczba_prob", "Liczba prób"],
@@ -22,6 +23,7 @@ const SUMMARY_COLUMNS = [
 const RAW_COLUMNS = [
   ["data", "Data"],
   ["pseudonim", "Pseudonim"],
+  ["dominujace_oko", "Dominujące oko"],
   ["id_sesji", "ID sesji"],
   ["nr_proby", "Nr próby"],
   ["strona", "Strona bodźca"],
@@ -65,6 +67,7 @@ function validate(data) {
   if (!s || !Array.isArray(trials) || trials.length < 1 || trials.length > 50) throw new Error("Niepoprawne dane");
   if (typeof s.pseudonim !== "string" || !s.pseudonim || s.pseudonim.length > 40) throw new Error("Niepoprawny pseudonim");
   if (!/^[a-z0-9-]{6,40}$/.test(s.id_sesji)) throw new Error("Niepoprawne id sesji");
+  if (["", "lewe", "prawe"].indexOf(s.dominujace_oko) === -1) throw new Error("Niepoprawne dominujące oko");
   trials.forEach(t => {
     if (t.id_sesji !== s.id_sesji || t.pseudonim !== s.pseudonim) throw new Error("Niespójna sesja");
     if (t.strona !== "lewa" && t.strona !== "prawa") throw new Error("Niepoprawna strona");
