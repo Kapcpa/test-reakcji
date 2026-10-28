@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test czasu reakcji</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --panel: #262626;
+    --fg: #ececec;
+    --muted: #9a9a9a;
+    --accent: #3b82f6;
+    --warning: #e11d48;
+    --stimulus: #ffffff;
+    --ok: #22c55e;
+    --err: #f97316;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; }
+  .screen { display: none; min-height: 100%; padding: 24px 16px; align-items: center; justify-content: center; }
+  .screen.active { display: flex; }
+  .card { width: 100%; max-width: 520px; background: var(--panel); border-radius: 12px; padding: 28px; }
+  h1 { margin: 0 0 20px; font-size: 1.5rem; }
+  p { line-height: 1.5; }
+  label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 0.9rem; }
+  input { width: 100%; padding: 10px 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #444; background: var(--bg); color: var(--fg); }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  details { margin-top: 20px; }
+  summary { cursor: pointer; color: var(--muted); }
+  button { margin-top: 24px; width: 100%; padding: 12px; font-size: 1rem; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  button.secondary { background: #3a3a3a; margin-top: 10px; }
+  .error { color: var(--err); min-height: 1.2em; margin: 10px 0 0; }
+  .status-ok { color: var(--ok); }
+  .status-err { color: var(--err); }
+  kbd { background: #3a3a3a; border-radius: 4px; padding: 2px 6px; }
+  #ready { text-align: center; }
+  #ready .hint { margin-top: 32px; font-size: 1.2rem; }
+
+  #test { position: fixed; inset: 0; cursor: none; padding: 0; }
+  #warning { position: absolute; top: 8%; left: 50%; transform: translateX(-50%); color: var(--warning); font-size: 96px; font-weight: 700; visibility: hidden; }
+  #stimulus { position: absolute; top: 50%; width: 120px; height: 120px; border-radius: 50%; background: var(--stimulus); transform: translate(-50%, -50%); visibility: hidden; }
+  #stimulus.L { left: 20%; }
+  #stimulus.P { left: 80%; }
+</style>
+</head>
+<body>
+
+<section id="start" class="screen active">
+  <form class="card" id="start-form">
+    <h1>Test czasu reakcji</h1>
+    <label for="pseudonim">Pseudonim uczestnika</label>
+    <input id="pseudonim" maxlength="40" autocomplete="off" required>
+
+    <details>
+      <summary>Ustawienia</summary>
+      <label for="trials">Liczba prób</label>
+      <input id="trials" type="number" min="1" max="50" required>
+      <div class="row">
+        <div>
+          <label for="warning-s">Jak długo widać „!” [s]</label>
+          <input id="warning-s" type="number" min="0" max="120" step="any" required>
+        </div>
+        <div>
+          <label for="foreperiod-s">Od „!” do kółka [s]</label>
+          <input id="foreperiod-s" type="number" min="0" max="120" step="any" required>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="pause-min">Przerwa po reakcji, od [s]</label>
+          <input id="pause-min" type="number" min="0" max="120" step="any" required>
+        </div>
+        <div>
+          <label for="pause-max">do [s]</label>
+          <input id="pause-max" type="number" min="0" max="120" step="any" required>
+        </div>
+      </div>
+      <p id="duration" style="color: var(--muted)"></p>
+    </details>
+
+    <p class="error" id="start-error"></p>
+    <button type="submit">Dalej</button>
+    <p id="pending" style="color: var(--muted)"></p>
+  </form>
+</section>
+
+<section id="ready" class="screen">
+  <div class="card">
+    <h1>Instrukcja</h1>
+    <p>Patrz na środek ekranu. Najpierw u góry na chwilę pojawi się czerwony wykrzyknik, a po nim kółko po lewej albo prawej stronie.</p>
+    <p>Jak najszybciej naciśnij klawisz po stronie kółka:<br>
+      lewo: <kbd>A</kbd> lub <kbd>←</kbd>, prawo: <kbd>D</kbd> lub <kbd>→</kbd></p>
+    <p class="hint">Naciśnij <kbd>spację</kbd>, aby rozpocząć</p>
+  </div>
+</section>
+
+<section id="test" class="screen">
+  <div id="warning">!</div>
+  <div id="stimulus"></div>
+</section>
+
+<section id="end" class="screen">
+  <div class="card">
+    <h1>Koniec testu</h1>
+    <p id="end-status"></p>
+    <button id="next">Następna osoba</button>
+    <button id="download" class="secondary">Pobierz CSV z tej sesji</button>
+  </div>
+</section>
+
+<script>
+// URL wdrożenia Apps Script w base64 (tylko zaciemnienie, nie zabezpieczenie): btoa("https://script.google.com/...")
+// Pusty = wyniki tylko do pliku CSV.
+const SHEET_URL_B64 = "";
+const SHEET_URL = SHEET_URL_B64 ? atob(SHEET_URL_B64) : "";
+
+const DEFAULTS = { trials: 12, foreperiodMs: 10000, warningMs: 1000, pauseMinS: 2, pauseMaxS: 4 };
+const KEYS = {
+  KeyA: ["L", "AD"],
+  KeyD: ["P", "AD"],
+  ArrowLeft: ["L", "strzalki"],
+  ArrowRight: ["P", "strzalki"],
+};
+const MAX_SAME_SIDE_IN_A_ROW = 3;
+
+const $ = id => document.getElementById(id);
+const state = { running: false, aborted: false, trial: null, cancel: null, settings: null, pseudonim: "", lastRows: [] };
+
+function load(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+function show(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
+}
+
+function stamp(d = new Date()) {
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function longestRun(seq) {
+  let best = 0, run = 0;
+  seq.forEach((s, i) => { run = s === seq[i - 1] ? run + 1 : 1; best = Math.max(best, run); });
+  return best;
+}
+
+// Po równo L i P (przy nieparzystej liczbie jedna strona losowo), losowa kolejność, bez długich serii.
+function makeSequence(n) {
+  for (;;) {
+    const seq = Array.from({ length: n }, (_, i) => (i < Math.floor(n / 2) ? "L" : "P"));
+    if (n % 2) seq[n - 1] = Math.random() < 0.5 ? "L" : "P";
+    shuffle(seq);
+    if (longestRun(seq) <= MAX_SAME_SIDE_IN_A_ROW) return seq;
+  }
+}
+
+function mean(values) {
+  if (!values.length) return "";
+  return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, ms);
+    state.cancel = () => { clearTimeout(timer); resolve(); };
+  });
+}
+
+// Wywołuje onFrame w klatce, w której obiekt ma się pojawić; zwraca znacznik tej klatki.
+function frameAt(target, onFrame) {
+  return new Promise(resolve => {
+    const tick = t => {
+      if (state.aborted) return resolve(null);
+      if (t < target) return requestAnimationFrame(tick);
+      onFrame();
+      resolve(t);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+function waitForResponse(trial) {
+  return new Promise(resolve => { trial.done = resolve; state.cancel = resolve; });
+}
+
+// --- ekran startowy ---
+
+function readSettings() {
+  return {
+    trials: Number($("trials").value),
+    foreperiodMs: Math.round(Number($("foreperiod-s").value) * 1000),
+    warningMs: Math.round(Number($("warning-s").value) * 1000),
+    pauseMinS: Number($("pause-min").value),
+    pauseMaxS: Number($("pause-max").value),
+  };
+}
+
+function fillSettings(s) {
+  $("trials").value = s.trials;
+  $("foreperiod-s").value = s.foreperiodMs / 1000;
+  $("warning-s").value = s.warningMs / 1000;
+  $("pause-min").value = s.pauseMinS;
+  $("pause-max").value = s.pauseMaxS;
+  updateDuration();
+}
+
+function updateDuration() {
+  const s = readSettings();
+  const avgS = s.trials * ((s.pauseMinS + s.pauseMaxS) / 2 + s.foreperiodMs / 1000 + 0.5);
+  const fmt = n => n.toLocaleString("pl-PL");
+  const pause = s.pauseMinS === s.pauseMaxS ? fmt(s.pauseMinS) : `${fmt(s.pauseMinS)}–${fmt(s.pauseMaxS)}`;
+  $("duration").textContent =
+    `Jedna próba: „!” przez ${fmt(s.warningMs / 1000)} s → pusty ekran → kółko ${fmt(s.foreperiodMs / 1000)} s po „!” → reakcja → przerwa ${pause} s. ` +
+    `Cały test: ok. ${Math.floor(avgS / 60)} min ${Math.round(avgS % 60)} s.`;
+}
+
+$("start-form").addEventListener("input", updateDuration);
+
+$("start-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const pseudonim = $("pseudonim").value.trim();
+  const s = readSettings();
+  const error = !pseudonim ? "Wpisz pseudonim."
+    : !(s.trials >= 1 && s.trials <= 50) ? "Liczba prób: 1–50."
+    : !(s.foreperiodMs >= 0) ? "Niepoprawny czas od „!” do kółka."
+    : !(s.warningMs >= 0 && s.warningMs <= s.foreperiodMs) ? "„!” nie może być widoczny dłużej niż czas od „!” do kółka."
+    : !(s.pauseMinS >= 0 && s.pauseMaxS >= s.pauseMinS) ? "Przerwa po reakcji: „do” musi być ≥ „od”."
+    : "";
+  $("start-error").textContent = error;
+  if (error) return;
+  save("settings", s);
+  state.settings = s;
+  state.pseudonim = pseudonim;
+  show("ready");
+});
+
+// --- test ---
+
+async function runTest() {
+  const s = state.settings;
+  const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const sequence = makeSequence(s.trials);
+  const rows = [];
+  state.running = true;
+  state.aborted = false;
+  show("test");
+
+  for (let i = 0; i < sequence.length; i++) {
+    const pauseMs = Math.round((s.pauseMinS + Math.random() * (s.pauseMaxS - s.pauseMinS)) * 1000);
+    await sleep(pauseMs);
+    if (state.aborted) break;
+
+    $("warning").style.visibility = "visible";
+    const warnedAt = performance.now();
+    if (s.warningMs < s.foreperiodMs) {
+      await sleep(s.warningMs);
+      $("warning").style.visibility = "hidden";
+      if (state.aborted) break;
+    }
+    // Odstęp liczony od pojawienia się „!”, więc jest stały niezależnie od czasu jego wyświetlania.
+    await sleep(Math.max(0, warnedAt + s.foreperiodMs - 50 - performance.now()));
+    if (state.aborted) break;
+
+    const trial = { side: sequence[i], onset: 0, firstKey: null, rtFirst: null, rtCorrect: null, keyset: null };
+    const onset = await frameAt(warnedAt + s.foreperiodMs, () => {
+      $("warning").style.visibility = "hidden";
+      $("stimulus").className = trial.side;
+      $("stimulus").style.visibility = "visible";
+      state.trial = trial;
+    });
+    if (state.aborted) break;
+    trial.onset = onset;
+
+    await waitForResponse(trial);
+    state.trial = null;
+    $("stimulus").style.visibility = "hidden";
+    if (state.aborted) break;
+
+    rows.push({
+      data: stamp(),
+      pseudonim: state.pseudonim,
+      id_sesji: sessionId,
+      nr_proby: i + 1,
+      strona: trial.side,
+      pierwszy_klawisz: trial.firstKey,
+      czas_pierwszej_reakcji_ms: trial.rtFirst,
+      blad: trial.firstKey === trial.side ? 0 : 1,
+      czas_poprawnej_reakcji_ms: trial.rtCorrect,
+      zestaw_klawiszy: trial.keyset,
+      odstep_sygnal_obiekt_ms: s.foreperiodMs,
+      czas_wykrzyknika_ms: s.warningMs,
+      przerwa_ms: pauseMs,
+    });
+  }
+
+  $("warning").style.visibility = "hidden";
+  $("stimulus").style.visibility = "hidden";
+  state.running = false;
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  finish(rows, sessionId);
+}
+
+document.addEventListener("keydown", e => {
+  if ($("ready").classList.contains("active") && e.code === "Space") {
+    e.preventDefault();
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    runTest();
+    return;
+  }
+  if (!state.running) return;
+  if (e.code === "Escape") return abort();
+
+  const mapped = KEYS[e.code];
+  if (!mapped) return;
+  e.preventDefault();
+  const trial = state.trial;
+  // Klawisze przed pojawieniem się obiektu są ignorowane.
+  if (!trial || e.repeat || e.timeStamp < trial.onset) return;
+
+  const [side, keyset] = mapped;
+  const rt = Math.round(e.timeStamp - trial.onset);
+  if (trial.firstKey === null) {
+    trial.firstKey = side;
+    trial.rtFirst = rt;
+    trial.keyset = keyset;
+  }
+  // Zły klawisz: błąd zapisany, obiekt zostaje do poprawnej reakcji.
+  if (side === trial.side) {
+    trial.rtCorrect = rt;
+    state.trial = null;
+    trial.done();
+  }
+});
+
+function abort() {
+  state.aborted = true;
+  state.cancel?.();
+}
+
+// Wyjście z pełnego ekranu w trakcie testu (np. Esc) przerywa test.
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && state.running) abort();
+});
+
+// --- wyniki ---
+
+function summarize(rows, sessionId) {
+  const s = state.settings;
+  const bySide = side => rows.filter(r => r.strona === side);
+  const rts = list => list.map(r => r.czas_poprawnej_reakcji_ms);
+  const L = bySide("L"), P = bySide("P");
+  return {
+    data: stamp(),
+    pseudonim: state.pseudonim,
+    id_sesji: sessionId,
+    ukonczony: rows.length === s.trials ? 1 : 0,
+    liczba_prob: rows.length,
+    sr_L_ms: mean(rts(L)),
+    sr_P_ms: mean(rts(P)),
+    sr_L_bez_bledow_ms: mean(rts(L.filter(r => !r.blad))),
+    sr_P_bez_bledow_ms: mean(rts(P.filter(r => !r.blad))),
+    bledy_L: L.filter(r => r.blad).length,
+    bledy_P: P.filter(r => r.blad).length,
+    ustawienia: `proby=${s.trials}; sygnal_obiekt_ms=${s.foreperiodMs}; wykrzyknik_ms=${s.warningMs}; przerwa_s=${s.pauseMinS}-${s.pauseMaxS}`,
+  };
+}
+
+function toCsv(rows) {
+  const cols = Object.keys(rows[0]);
+  const esc = v => {
+    const str = String(v ?? "");
+    return /[;"\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  return "﻿" + [cols.join(";"), ...rows.map(r => cols.map(c => esc(r[c])).join(";"))].join("\r\n");
+}
+
+function downloadCsv(rows) {
+  if (!rows.length) return;
+  const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `wyniki_${rows[0].pseudonim}_${rows[0].id_sesji}.csv`.replace(/[^\w.-]/g, "_");
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function send(payload) {
+  // text/plain, bo Apps Script nie obsługuje zapytań preflight CORS.
+  const res = await fetch(SHEET_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) });
+  const body = await res.json();
+  if (!body.ok) throw new Error(body.error);
+}
+
+// Niewysłane sesje czekają w przeglądarce i są ponawiane przy kolejnej okazji.
+async function flushPending() {
+  if (!SHEET_URL) return;
+  const failed = [];
+  for (const payload of load("pending", [])) {
+    try { await send(payload); } catch { failed.push(payload); }
+  }
+  save("pending", failed);
+  $("pending").textContent = failed.length ? `Niewysłane sesje w tej przeglądarce: ${failed.length}` : "";
+  return failed;
+}
+
+async function finish(rows, sessionId) {
+  state.lastRows = rows;
+  show("end");
+  const status = $("end-status");
+  status.className = "";
+
+  if (!rows.length) {
+    status.textContent = "Test przerwany przed pierwszą próbą, brak wyników.";
+    return;
+  }
+  if (!SHEET_URL) {
+    status.textContent = "Brak adresu arkusza w konfiguracji. Wyniki pobrane do pliku CSV.";
+    downloadCsv(rows);
+    return;
+  }
+
+  status.textContent = "Wysyłanie wyników…";
+  save("pending", [...load("pending", []), { summary: summarize(rows, sessionId), trials: rows }]);
+  const failed = await flushPending();
+  if (failed.some(p => p.summary.id_sesji === sessionId)) {
+    status.className = "status-err";
+    status.textContent = "Nie udało się wysłać wyników. Zapisano je w przeglądarce (ponowimy wysyłkę później) i pobrano plik CSV.";
+    downloadCsv(rows);
+  } else {
+    status.className = "status-ok";
+    status.textContent = "Wyniki zapisane w arkuszu.";
+  }
+}
+
+$("next").addEventListener("click", () => {
+  $("pseudonim").value = "";
+  show("start");
+  $("pseudonim").focus();
+});
+
+$("download").addEventListener("click", () => downloadCsv(state.lastRows));
+
+fillSettings({ ...DEFAULTS, ...load("settings", {}) });
+flushPending();
+$("pseudonim").focus();
+</script>
+</body>
+</html>
