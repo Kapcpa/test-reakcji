@@ -13,6 +13,7 @@
     --accent: #3b82f6;
     --warning: #e11d48;
     --stimulus: #ffffff;
+    --fixation: #8a8a8a;
     --ok: #22c55e;
     --err: #f97316;
   }
@@ -41,6 +42,10 @@
   #test { position: fixed; inset: 0; cursor: none; padding: 0; }
   #warning { position: absolute; top: 8%; left: 50%; transform: translateX(-50%); color: var(--warning); font-size: 96px; font-weight: 700; visibility: hidden; }
   #stimulus { position: absolute; top: 50%; width: 120px; height: 120px; border-radius: 50%; background: var(--stimulus); transform: translate(-50%, -50%); visibility: hidden; }
+  #fixation { position: absolute; top: 50%; left: 50%; width: 120px; height: 120px; transform: translate(-50%, -50%); }
+  #fixation::before, #fixation::after { content: ""; position: absolute; background: var(--fixation); }
+  #fixation::before { left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); }
+  #fixation::after { top: 0; bottom: 0; left: 50%; width: 3px; transform: translateX(-50%); }
   #stimulus.L { left: 20%; }
   #stimulus.P { left: 80%; }
 </style>
@@ -59,32 +64,7 @@
       <option value="prawe">prawe</option>
     </select>
 
-    <details>
-      <summary>Ustawienia</summary>
-      <label for="trials">Liczba prób</label>
-      <input id="trials" type="number" min="1" max="50" required>
-      <div class="row">
-        <div>
-          <label for="warning-s">Jak długo widać „!” [s]</label>
-          <input id="warning-s" type="number" min="0" max="120" step="any" required>
-        </div>
-        <div>
-          <label for="foreperiod-s">Od „!” do kółka [s]</label>
-          <input id="foreperiod-s" type="number" min="0" max="120" step="any" required>
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label for="pause-min">Przerwa po reakcji, od [s]</label>
-          <input id="pause-min" type="number" min="0" max="120" step="any" required>
-        </div>
-        <div>
-          <label for="pause-max">do [s]</label>
-          <input id="pause-max" type="number" min="0" max="120" step="any" required>
-        </div>
-      </div>
-      <p id="duration" style="color: var(--muted)"></p>
-    </details>
+    <p id="duration" style="color: var(--muted)"></p>
 
     <p class="error" id="start-error"></p>
     <button type="submit">Dalej</button>
@@ -95,15 +75,16 @@
 <section id="ready" class="screen">
   <div class="card">
     <h1>Instrukcja</h1>
-    <p>Patrz na środek ekranu. Najpierw u góry na chwilę pojawi się czerwony wykrzyknik, a po nim kółko po lewej albo prawej stronie.</p>
-    <p>Jak najszybciej naciśnij klawisz po stronie kółka:<br>
+    <p>Patrz na środek ekranu. Najpierw pojawi się czerwony wykrzyknik, dopiero po nim kółko po lewej lub prawej stronie.</p>
+    <p>Jak najszybciej naciśnij klawisz po stronie zauważonego kółka:<br>
       lewo: <kbd>A</kbd> lub <kbd>←</kbd>, prawo: <kbd>D</kbd> lub <kbd>→</kbd></p>
     <p>Test uruchomi się na pełnym ekranie. <kbd>Esc</kbd> przerywa test.</p>
-    <p class="hint">Naciśnij <kbd>spację</kbd>, aby rozpocząć</p>
+    <p class="hint">Naciśnij <kbd>spację</kbd>, aby rozpocząć test.</p>
   </div>
 </section>
 
 <section id="test" class="screen">
+  <div id="fixation"></div>
   <div id="warning">!</div>
   <div id="stimulus"></div>
 </section>
@@ -123,14 +104,15 @@
 const SHEET_URL_B64 = "aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J6TF9ieUtuVlo0U0ZTalJFVjdaclEza1RZODZhYVpPRHY5Q2g5a3RlYlFEdF9ja3RPZWF1dmI4UXh0NkYxM0cwd2ZNUS9leGVj";
 const SHEET_URL = SHEET_URL_B64 ? atob(SHEET_URL_B64) : "";
 
-const DEFAULTS = { trials: 12, foreperiodMs: 10000, warningMs: 1000, pauseMinS: 2, pauseMaxS: 4 };
+// Ustalone z Zuzą: ten sam schemat stron i te same czasy dla wszystkich uczestników.
+const SEQUENCE = "LPLLPLPPLPLP";
+const SETTINGS = { trials: SEQUENCE.length, foreperiodMs: 3000, warningMs: 1000, pauseMinS: 2, pauseMaxS: 3 };
 const KEYS = {
   KeyA: ["L", "A/D"],
   KeyD: ["P", "A/D"],
   ArrowLeft: ["L", "strzałki"],
   ArrowRight: ["P", "strzałki"],
 };
-const MAX_SAME_SIDE_IN_A_ROW = 3;
 const SIDE_NAMES = { L: "lewa", P: "prawa" };
 const yesNo = b => (b ? "tak" : "nie");
 const fmt = n => n.toLocaleString("pl-PL");
@@ -173,30 +155,6 @@ function stamp(d = new Date()) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function longestRun(seq) {
-  let best = 0, run = 0;
-  seq.forEach((s, i) => { run = s === seq[i - 1] ? run + 1 : 1; best = Math.max(best, run); });
-  return best;
-}
-
-// Po równo L i P (przy nieparzystej liczbie jedna strona losowo), losowa kolejność, bez długich serii.
-function makeSequence(n) {
-  for (;;) {
-    const seq = Array.from({ length: n }, (_, i) => (i < Math.floor(n / 2) ? "L" : "P"));
-    if (n % 2) seq[n - 1] = Math.random() < 0.5 ? "L" : "P";
-    shuffle(seq);
-    if (longestRun(seq) <= MAX_SAME_SIDE_IN_A_ROW) return seq;
-  }
-}
-
 function mean(values) {
   if (!values.length) return "";
   return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
@@ -228,50 +186,21 @@ function waitForResponse(trial) {
 
 // --- ekran startowy ---
 
-function readSettings() {
-  return {
-    trials: Number($("trials").value),
-    foreperiodMs: Math.round(Number($("foreperiod-s").value) * 1000),
-    warningMs: Math.round(Number($("warning-s").value) * 1000),
-    pauseMinS: Number($("pause-min").value),
-    pauseMaxS: Number($("pause-max").value),
-  };
-}
-
-function fillSettings(s) {
-  $("trials").value = s.trials;
-  $("foreperiod-s").value = s.foreperiodMs / 1000;
-  $("warning-s").value = s.warningMs / 1000;
-  $("pause-min").value = s.pauseMinS;
-  $("pause-max").value = s.pauseMaxS;
-  updateDuration();
-}
-
-function updateDuration() {
-  const s = readSettings();
+function showDuration() {
+  const s = SETTINGS;
   const avgS = s.trials * ((s.pauseMinS + s.pauseMaxS) / 2 + s.foreperiodMs / 1000 + 0.5);
-  const pause = s.pauseMinS === s.pauseMaxS ? fmt(s.pauseMinS) : `${fmt(s.pauseMinS)}–${fmt(s.pauseMaxS)}`;
   $("duration").textContent =
-    `Jedna próba: „!” przez ${fmt(s.warningMs / 1000)} s → pusty ekran → kółko ${fmt(s.foreperiodMs / 1000)} s po „!” → reakcja → przerwa ${pause} s. ` +
+    `${s.trials} prób: „!” przez ${fmt(s.warningMs / 1000)} s → kółko ${fmt(s.foreperiodMs / 1000)} s po „!” → przerwa ${fmt(s.pauseMinS)}–${fmt(s.pauseMaxS)} s. ` +
     `Cały test: ok. ${Math.floor(avgS / 60)} min ${Math.round(avgS % 60)} s.`;
 }
-
-$("start-form").addEventListener("input", updateDuration);
 
 $("start-form").addEventListener("submit", e => {
   e.preventDefault();
   const pseudonim = $("pseudonim").value.trim();
-  const s = readSettings();
-  const error = !pseudonim ? "Wpisz pseudonim."
-    : !(s.trials >= 1 && s.trials <= 50) ? "Liczba prób: 1–50."
-    : !(s.foreperiodMs >= 0) ? "Niepoprawny czas od „!” do kółka."
-    : !(s.warningMs >= 0 && s.warningMs <= s.foreperiodMs) ? "„!” nie może być widoczny dłużej niż czas od „!” do kółka."
-    : !(s.pauseMinS >= 0 && s.pauseMaxS >= s.pauseMinS) ? "Przerwa po reakcji: „do” musi być ≥ „od”."
-    : "";
+  const error = !pseudonim ? "Wpisz pseudonim." : "";
   $("start-error").textContent = error;
   if (error) return;
-  save("settings", s);
-  state.settings = s;
+  state.settings = SETTINGS;
   state.pseudonim = pseudonim;
   state.eye = $("eye").value;
   show("ready");
@@ -282,7 +211,7 @@ $("start-form").addEventListener("submit", e => {
 async function runTest() {
   const s = state.settings;
   const sessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const sequence = makeSequence(s.trials);
+  const sequence = [...SEQUENCE];
   const rows = [];
   state.running = true;
   state.aborted = false;
@@ -408,7 +337,7 @@ function summarize(rows, sessionId) {
     sr_P_bez_bledow_ms: mean(rts(ok(P))),
     bledy_L: errors(L),
     bledy_P: errors(P),
-    ustawienia: `liczba prób: ${s.trials}; „!”: ${fmt(s.warningMs / 1000)} s; od „!” do bodźca: ${fmt(s.foreperiodMs / 1000)} s; przerwa: ${fmt(s.pauseMinS)}–${fmt(s.pauseMaxS)} s`,
+    ustawienia: `liczba prób: ${s.trials}; „!”: ${fmt(s.warningMs / 1000)} s; od „!” do bodźca: ${fmt(s.foreperiodMs / 1000)} s; przerwa: ${fmt(s.pauseMinS)}–${fmt(s.pauseMaxS)} s; schemat: ${SEQUENCE}`,
   };
 }
 
@@ -497,7 +426,7 @@ $("next").addEventListener("click", () => {
 
 $("download").addEventListener("click", () => downloadCsv(state.lastRows));
 
-fillSettings({ ...DEFAULTS, ...load("settings", {}) });
+showDuration();
 flushPending();
 $("pseudonim").focus();
 </script>
