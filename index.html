@@ -42,10 +42,10 @@
   #test { position: fixed; inset: 0; cursor: none; padding: 0; }
   #warning { position: absolute; top: 8%; left: 50%; transform: translateX(-50%); color: var(--warning); font-size: 96px; font-weight: 700; visibility: hidden; }
   #stimulus { position: absolute; top: 50%; width: 120px; height: 120px; border-radius: 50%; background: var(--stimulus); transform: translate(-50%, -50%); visibility: hidden; }
-  #fixation { position: absolute; top: 50%; left: 50%; width: 120px; height: 120px; transform: translate(-50%, -50%); }
+  #fixation { position: absolute; top: 50%; left: 50%; width: 60px; height: 60px; transform: translate(-50%, -50%); }
   #fixation::before, #fixation::after { content: ""; position: absolute; background: var(--fixation); }
-  #fixation::before { left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%); }
-  #fixation::after { top: 0; bottom: 0; left: 50%; width: 3px; transform: translateX(-50%); }
+  #fixation::before { left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); }
+  #fixation::after { top: 0; bottom: 0; left: 50%; width: 2px; transform: translateX(-50%); }
   #stimulus.L { left: 20%; }
   #stimulus.P { left: 80%; }
 </style>
