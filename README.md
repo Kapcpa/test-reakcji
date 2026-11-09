@@ -28,11 +28,11 @@ Zakładki `Wyniki` i `Wszystkie próby` utworzą się same przy pierwszej sesji.
 
 ## Przebieg testu
 
-1. Pseudonim (+ opcjonalnie ustawienia czasów, zapamiętywane w przeglądarce) → Dalej.
+1. Pseudonim (+ opcjonalnie dominujące oko) → Dalej. Czasy i schemat stron są stałe (`SEQUENCE` i `SETTINGS` na górze skryptu w `index.html`): 12 prób `LPLLPLPPLPLP`, „!” 1 s, od „!” do kółka 3 s, przerwa 2–3 s.
 2. Instrukcja → spacja → test na pełnym ekranie.
-3. Każda próba: przerwa → czerwony „!” na chwilę → pusty ekran → kółko po lewej/prawej (stały odstęp od „!”) → klawisz A/D lub ←/→.
+3. Przez cały test krzyżyk na środku. Każda próba: przerwa → czerwony „!” na chwilę → kółko po lewej/prawej (stały odstęp od „!”) → klawisz A/D lub ←/→.
 4. Klawisze przed pojawieniem się kółka są ignorowane. Zły klawisz = błąd z czasem, kółko zostaje do poprawnej reakcji.
-5. Esc albo wyjście z pełnego ekranu przerywa test (zapisują się ukończone próby, `ukonczony = 0`).
+5. Esc albo wyjście z pełnego ekranu przerywa test (zapisują się ukończone próby, „Ukończony” = nie).
 6. Na koniec wysyłka do arkusza. Jeśli się nie uda: wyniki zostają w przeglądarce (wysyłka ponawiana przy kolejnej sesji) i pobiera się CSV.
 
 ## Kolumny
