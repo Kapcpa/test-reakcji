@@ -1,0 +1,8 @@
+# Pliki repo, których Cloudflare nie ma serwować — na stronie tylko index.html
+.assetsignore
+.gitignore
+README.md
+apps-script.gs
+wrangler.jsonc
+.wrangler
+prywatne/

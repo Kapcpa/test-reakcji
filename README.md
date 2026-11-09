@@ -21,10 +21,10 @@ Otwórz `index.html` w przeglądarce. Bez ustawionego `SHEET_URL_B64` wyniki pob
 
 Zakładki `Wyniki` i `Wszystkie próby` utworzą się same przy pierwszej sesji. Po każdej zmianie skryptu: Wdróż → Zarządzaj wdrożeniami → edytuj → nowa wersja (wtedy URL zostaje ten sam).
 
-## Publikacja (GitHub Pages)
+## Publikacja (Cloudflare)
 
-1. Repo z `index.html` → Settings → Pages → Deploy from branch → `main` / root.
-2. Strona pod `https://<user>.github.io/<repo>/`.
+1. Strona: https://test-reakcji.badanie.workers.dev — Cloudflare Worker podpięty do repo, każdy push do `main` wdraża się sam (`npx wrangler deploy`).
+2. `.assetsignore` — pliki repo, których strona nie serwuje (na stronie tylko `index.html`).
 
 ## Przebieg testu
 
